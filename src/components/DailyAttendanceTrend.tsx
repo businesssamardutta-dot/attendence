@@ -123,8 +123,8 @@ export default function DailyAttendanceTrend({
       {/* Main Grid: Chart and Quick Facts panel */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
         {/* Recharts Line Chart */}
-        <div className="lg:col-span-3 h-[250px] w-full" id="attendance-line-chart">
-          <ResponsiveContainer width="100%" height="100%">
+        <div className="lg:col-span-3 h-[250px] w-full min-w-0" id="attendance-line-chart">
+          <ResponsiveContainer width="100%" height="100%" minWidth={0}>
             <LineChart
               data={trendData}
               margin={{ top: 10, right: 15, left: -20, bottom: 5 }}
