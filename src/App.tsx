@@ -23,6 +23,7 @@ import {
   Info,
 } from "lucide-react";
 import { Employee, AttendanceLog } from "./types";
+import { FALLBACK_EMPLOYEES, FALLBACK_ATTENDANCE_LOGS } from "./data/fallbackData";
 
 // Import modular pages and elements
 import StatsDonutChart from "./components/StatsDonutChart";
@@ -194,26 +195,76 @@ export default function App() {
     const loadAllData = async () => {
       setLoading(true);
       try {
-        const statusRes = await fetch("/api/status");
-        if (statusRes.ok) {
-          const statusJson = await statusRes.json();
-          setDbStatus(statusJson);
+        let hasFetchedStatus = false;
+        let hasFetchedEmployees = false;
+        let hasFetchedLogs = false;
+
+        try {
+          const statusRes = await fetch("/api/status");
+          if (statusRes.ok) {
+            const statusJson = await statusRes.json();
+            // Verify it's actually JSON and not an index.html fallback
+            if (statusJson && typeof statusJson === "object" && "connected" in statusJson) {
+              setDbStatus(statusJson);
+              hasFetchedStatus = true;
+            }
+          }
+        } catch (e) {
+          console.warn("Status fetch fallback:", e);
         }
 
-        const empRes = await fetch("/api/employees");
-        if (empRes.ok) {
-          const empJson = await empRes.json();
-          setEmployees(empJson.data);
+        try {
+          const empRes = await fetch("/api/employees");
+          if (empRes.ok) {
+            const empJson = await empRes.json();
+            if (empJson && Array.isArray(empJson.data)) {
+              setEmployees(empJson.data);
+              hasFetchedEmployees = true;
+            }
+          }
+        } catch (e) {
+          console.warn("Employees fetch fallback:", e);
         }
 
-        const logsRes = await fetch("/api/attendance");
-        if (logsRes.ok) {
-          const logsJson = await logsRes.json();
-          setLogs(logsJson.data);
+        try {
+          const logsRes = await fetch("/api/attendance");
+          if (logsRes.ok) {
+            const logsJson = await logsRes.json();
+            if (logsJson && Array.isArray(logsJson.data)) {
+              setLogs(logsJson.data);
+              hasFetchedLogs = true;
+            }
+          }
+        } catch (e) {
+          console.warn("Attendance logs fetch fallback:", e);
+        }
+
+        // Apply offline demo fallback if calls failed or returned non-JSON (typical on static GitHub Pages)
+        if (!hasFetchedEmployees) {
+          setEmployees(FALLBACK_EMPLOYEES);
+        }
+        if (!hasFetchedLogs) {
+          setLogs(FALLBACK_ATTENDANCE_LOGS);
+        }
+        if (!hasFetchedStatus) {
+          setDbStatus({
+            connected: false,
+            message: "Operating in Offline/Demo mode on GitHub Pages",
+            mode: "Local Client Fallback Mode",
+            url: ""
+          });
         }
       } catch (err) {
         console.error("Networking fetch error:", err);
-        showToast("Error synchronizing backend log queues.", "error");
+        setEmployees(FALLBACK_EMPLOYEES);
+        setLogs(FALLBACK_ATTENDANCE_LOGS);
+        setDbStatus({
+          connected: false,
+          message: "Operating in Offline/Demo mode on GitHub Pages",
+          mode: "Local Client Fallback Mode",
+          url: ""
+        });
+        showToast("Operating in Local Fallback mode.", "info");
       } finally {
         setLoading(false);
       }
@@ -271,11 +322,34 @@ export default function App() {
         setShowLogModal(false);
         setRefreshTrigger(prev => prev + 1);
       } else {
-        const errJson = await response.json();
-        showToast(errJson.error || "Failed logging attendance.", "error");
+        // Fallback for static host / offline block where POSTing returns 404
+        const fallbackLog: AttendanceLog = {
+          id: logs.length ? Math.max(...logs.map(l => l.id || 0)) + 1 : 1,
+          company: logCompany,
+          employee: logEmployee,
+          timestamp: timestampStr,
+          status: logStatus,
+          location: logLocation.trim() || "Main Workspace Office"
+        };
+        setLogs([fallbackLog, ...logs]);
+        showToast(`Registered ${logStatus} stamp for ${logEmployee} (Local Mode)!`, "success");
+        setLogLocation("");
+        setShowLogModal(false);
       }
     } catch (err) {
-      showToast("Unable to record attendance entry.", "error");
+      // Offline fallback
+      const fallbackLog: AttendanceLog = {
+        id: logs.length ? Math.max(...logs.map(l => l.id || 0)) + 1 : 1,
+        company: logCompany,
+        employee: logEmployee,
+        timestamp: timestampStr,
+        status: logStatus,
+        location: logLocation.trim() || "Main Workspace Office"
+      };
+      setLogs([fallbackLog, ...logs]);
+      showToast(`Registered ${logStatus} stamp for ${logEmployee} (Local Mode)!`, "success");
+      setLogLocation("");
+      setShowLogModal(false);
     } finally {
       setIsSubmittingLog(false);
     }
