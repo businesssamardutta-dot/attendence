@@ -1,0 +1,6 @@
+{
+  "name": "Attendance Dashboard & Management App",
+  "description": "Company-wise employee registry and check-in/out attendance logging with real-time dashboard visualizations.",
+  "requestFramePermissions": ["geolocation"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
