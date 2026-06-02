@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import { Employee, AttendanceLog } from "./types";
 import { FALLBACK_EMPLOYEES, FALLBACK_ATTENDANCE_LOGS } from "./data/fallbackData";
+import { supabase, fetchAllAttendanceLogs, insertAttendanceLog } from "./lib/supabaseClient";
 
 // Import modular pages and elements
 import StatsDonutChart from "./components/StatsDonutChart";
@@ -195,61 +196,53 @@ export default function App() {
     const loadAllData = async () => {
       setLoading(true);
       try {
-        let hasFetchedStatus = false;
-        let hasFetchedEmployees = false;
-        let hasFetchedLogs = false;
-
+        let connected = false;
         try {
-          const statusRes = await fetch("/api/status");
-          if (statusRes.ok) {
-            const statusJson = await statusRes.json();
-            // Verify it's actually JSON and not an index.html fallback
-            if (statusJson && typeof statusJson === "object" && "connected" in statusJson) {
-              setDbStatus(statusJson);
-              hasFetchedStatus = true;
-            }
+          const { error: pingError } = await supabase.from("employee_master").select("id").limit(1);
+          if (!pingError) {
+            connected = true;
           }
         } catch (e) {
-          console.warn("Status fetch fallback:", e);
+          console.warn("Supabase ping failed:", e);
         }
 
-        try {
-          const empRes = await fetch("/api/employees");
-          if (empRes.ok) {
-            const empJson = await empRes.json();
-            if (empJson && Array.isArray(empJson.data)) {
-              setEmployees(empJson.data);
-              hasFetchedEmployees = true;
-            }
+        if (connected) {
+          const { data: empData, error: empError } = await supabase
+            .from("employee_master")
+            .select("*")
+            .order("company_name", { ascending: true })
+            .order("employee_name", { ascending: true });
+
+          if (!empError && empData) {
+            setEmployees(empData);
+          } else {
+            setEmployees(FALLBACK_EMPLOYEES);
           }
-        } catch (e) {
-          console.warn("Employees fetch fallback:", e);
-        }
 
-        try {
-          const logsRes = await fetch("/api/attendance");
-          if (logsRes.ok) {
-            const logsJson = await logsRes.json();
-            if (logsJson && Array.isArray(logsJson.data)) {
-              setLogs(logsJson.data);
-              hasFetchedLogs = true;
+          try {
+            const logsData = await fetchAllAttendanceLogs();
+            if (logsData && logsData.length > 0) {
+              setLogs(logsData);
+            } else {
+              setLogs(FALLBACK_ATTENDANCE_LOGS);
             }
+          } catch (e) {
+            console.error("Error fetching logs:", e);
+            setLogs(FALLBACK_ATTENDANCE_LOGS);
           }
-        } catch (e) {
-          console.warn("Attendance logs fetch fallback:", e);
-        }
 
-        // Apply offline demo fallback if calls failed or returned non-JSON (typical on static GitHub Pages)
-        if (!hasFetchedEmployees) {
+          setDbStatus({
+            connected: true,
+            message: "Connected directly to Supabase Database",
+            mode: "Live Supabase Mode",
+            url: "https://zakajrrmzzybyptypjdt.supabase.co"
+          });
+        } else {
           setEmployees(FALLBACK_EMPLOYEES);
-        }
-        if (!hasFetchedLogs) {
           setLogs(FALLBACK_ATTENDANCE_LOGS);
-        }
-        if (!hasFetchedStatus) {
           setDbStatus({
             connected: false,
-            message: "Operating in Offline/Demo mode on GitHub Pages",
+            message: "Operating in Offline/Demo fallback mode",
             mode: "Local Client Fallback Mode",
             url: ""
           });
@@ -304,25 +297,20 @@ export default function App() {
     const timestampStr = getKolkataTimestamp();
 
     try {
-      const response = await fetch("/api/attendance", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+      if (dbStatus.connected) {
+        await insertAttendanceLog({
           company: logCompany,
           employee: logEmployee,
           timestamp: timestampStr,
           status: logStatus,
           location: logLocation.trim() || "Main Workspace Office"
-        })
-      });
-
-      if (response.ok) {
+        });
         showToast(`Registered ${logStatus} stamp for ${logEmployee}!`, "success");
         setLogLocation("");
         setShowLogModal(false);
         setRefreshTrigger(prev => prev + 1);
       } else {
-        // Fallback for static host / offline block where POSTing returns 404
+        // Fallback for static host / offline block
         const fallbackLog: AttendanceLog = {
           id: logs.length ? Math.max(...logs.map(l => l.id || 0)) + 1 : 1,
           company: logCompany,
@@ -337,6 +325,7 @@ export default function App() {
         setShowLogModal(false);
       }
     } catch (err) {
+      console.error("Local log recording fallback:", err);
       // Offline fallback
       const fallbackLog: AttendanceLog = {
         id: logs.length ? Math.max(...logs.map(l => l.id || 0)) + 1 : 1,

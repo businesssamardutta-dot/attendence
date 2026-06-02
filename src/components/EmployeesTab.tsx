@@ -1,6 +1,7 @@
 import { useState, FormEvent, Dispatch, SetStateAction } from "react";
 import { UserPlus, Edit2, Trash2, Search, Building2, User } from "lucide-react";
 import { Employee } from "../types";
+import { supabase } from "../lib/supabaseClient";
 
 interface EmployeesTabProps {
   employees: Employee[];
@@ -45,16 +46,12 @@ export default function EmployeesTab({
 
     setIsSubmitting(true);
     try {
-      const response = await fetch("/api/employees", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          company_name: empCompany,
-          employee_name: empName.trim()
-        })
-      });
+      const { data, error } = await supabase
+        .from("employee_master")
+        .insert([{ company_name: empCompany, employee_name: empName.trim() }])
+        .select();
 
-      if (response.ok) {
+      if (!error && data && data.length > 0) {
         showToast(`Registered ${empName.trim()} under ${empCompany} successfully!`, "success");
         setEmpName("");
         setRefreshTrigger(p => p + 1);
@@ -96,16 +93,12 @@ export default function EmployeesTab({
 
     setIsSubmitting(true);
     try {
-      const response = await fetch(`/api/employees/${editingEmp.id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          company_name: editingEmp.company_name,
-          employee_name: editingEmp.employee_name.trim()
-        })
-      });
+      const { error } = await supabase
+        .from("employee_master")
+        .update({ company_name: editingEmp.company_name, employee_name: editingEmp.employee_name.trim() })
+        .eq("id", editingEmp.id);
 
-      if (response.ok) {
+      if (!error) {
         showToast(`Updated profile for ${editingEmp.employee_name.trim()} successfully!`, "success");
         setEditingEmp(null);
         setRefreshTrigger(p => p + 1);
@@ -134,11 +127,12 @@ export default function EmployeesTab({
     }
 
     try {
-      const response = await fetch(`/api/employees/${id}`, {
-        method: "DELETE"
-      });
+      const { error } = await supabase
+        .from("employee_master")
+        .delete()
+        .eq("id", id);
 
-      if (response.ok) {
+      if (!error) {
         showToast(`Successfully deleted ${name} from corporate rosters!`, "success");
         if (editingEmp?.id === id) {
           setEditingEmp(null); // Clear editing if active deleted
