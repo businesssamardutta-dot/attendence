@@ -62,7 +62,7 @@ export default function ReportsTab({ employees, logs, selectedDate, selectedMont
 
       const grouped: Record<string, { ins: AttendanceLog[]; outs: AttendanceLog[] }> = {};
       baseLogs.forEach(log => {
-        const key = `${log.company}-${log.employee}`;
+        const key = `${log.company}|${log.employee}`;
         if (!grouped[key]) grouped[key] = { ins: [], outs: [] };
         const norm = (log.status || "").trim().toUpperCase();
         if (norm === "IN") grouped[key].ins.push(log);
@@ -71,9 +71,9 @@ export default function ReportsTab({ employees, logs, selectedDate, selectedMont
 
       const rows: any[] = [];
       Object.entries(grouped).forEach(([key, val]) => {
-        const dashIn = key.indexOf("-");
-        const coName = key.substring(0, dashIn);
-        const empName = key.substring(dashIn + 1);
+        const parts = key.split("|");
+        const coName = parts[0];
+        const empName = parts.slice(1).join("|");
 
         if (selectedRepCompany !== "ALL" && coName !== selectedRepCompany) return;
 

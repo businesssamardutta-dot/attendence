@@ -595,7 +595,7 @@ export default function App() {
     const grouped: Record<string, { ins: AttendanceLog[]; outs: AttendanceLog[] }> = {};
     
     dayLogs.forEach(log => {
-      const key = `${log.company}-${log.employee}`;
+      const key = `${log.company}|${log.employee}`;
       if (!grouped[key]) {
         grouped[key] = { ins: [], outs: [] };
       }
@@ -610,9 +610,9 @@ export default function App() {
     const shiftRows: PairedRecord[] = [];
 
     Object.entries(grouped).forEach(([key, value]) => {
-      const dashIndex = key.indexOf("-");
-      const company = key.substring(0, dashIndex);
-      const employee = key.substring(dashIndex + 1);
+      const parts = key.split("|");
+      const company = parts[0];
+      const employee = parts.slice(1).join("|");
 
       const sortedIns = [...value.ins].sort((a, b) => (a.timestamp || "").localeCompare(b.timestamp || ""));
       const sortedOuts = [...value.outs].sort((a, b) => (a.timestamp || "").localeCompare(b.timestamp || ""));
