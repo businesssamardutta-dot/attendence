@@ -1,7 +1,7 @@
 import { useState, FormEvent, Dispatch, SetStateAction } from "react";
-import { UserPlus, Edit2, Trash2, Search, Building2, User } from "lucide-react";
+import { UserPlus, Edit2, Trash2, Search, Building2, User, Database, Copy, Check, ShieldAlert } from "lucide-react";
 import { Employee } from "../types";
-import { supabase } from "../lib/supabaseClient";
+import { supabase, deleteLogsBeforeApril2026 } from "../lib/supabaseClient";
 
 interface EmployeesTabProps {
   employees: Employee[];
@@ -25,6 +25,46 @@ export default function EmployeesTab({
   const [companyFilter, setCompanyFilter] = useState("ALL");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
+
+  // Database Management States & Utilities
+  const [isPurging, setIsPurging] = useState(false);
+  const [copiedQuery, setCopiedQuery] = useState(false);
+  const [purgeResult, setPurgeResult] = useState<{ company: string; deletedCount: number }[] | null>(null);
+
+  const handlePurgeOldLogs = async () => {
+    if (!window.confirm("CRITICAL WARNING:\nYou are about to permanently DELETE all attendance tracking logs matching a date before 2026-04-01 across all 5 databases.\n\nThis delete action is irreversible.\nAre you absolutely sure you wish to execute this database purge?")) {
+      return;
+    }
+
+    setIsPurging(true);
+    setPurgeResult(null);
+    try {
+      const results = await deleteLogsBeforeApril2026();
+      setPurgeResult(results);
+      const totalDeleted = results.reduce((sum, res) => sum + res.deletedCount, 0);
+      showToast(`Successfully purged ${totalDeleted} historical logs from Supabase tables!`, "success");
+      setRefreshTrigger(prev => prev + 1); // Triggers main App.tsx to reload the new datasets
+    } catch (err) {
+      console.error(err);
+      showToast("Error executing Supabase purge operation. Please use physical SQL Editor.", "error");
+    } finally {
+      setIsPurging(false);
+    }
+  };
+
+  const copySQLQuery = () => {
+    const rawSQL = `-- SQL Query to securely delete logs before April 1st, 2026 across all corporate tables
+DELETE FROM "BHANGAKUTHI" WHERE timestamp < '2026-04-01 00:00:00';
+DELETE FROM "HB" WHERE timestamp < '2026-04-01 00:00:00';
+DELETE FROM "HB-TP" WHERE timestamp < '2026-04-01 00:00:00';
+DELETE FROM "HBPL" WHERE timestamp < '2026-04-01 00:00:00';
+DELETE FROM "SEFALI" WHERE timestamp < '2026-04-01 00:00:00';`;
+
+    navigator.clipboard.writeText(rawSQL);
+    setCopiedQuery(true);
+    showToast("Supabase queries copied to clipboard!", "success");
+    setTimeout(() => setCopiedQuery(false), 2000);
+  };
 
   const COMPANIES = ["BHANGAKUTHI", "HB", "HB-TP", "HBPL", "SEFALI"];
   const COMPANY_COLORS: Record<string, string> = {
@@ -181,7 +221,8 @@ export default function EmployeesTab({
     <div className="grid grid-cols-1 lg:grid-cols-4 gap-8 text-left" id="employees-tab-view">
       
       {/* Sidebar: Add / Update Employee profile form */}
-      <div className="lg:col-span-1 bg-white border border-slate-100 p-6 rounded-2xl shadow-xs">
+      <div className="lg:col-span-1 flex flex-col gap-6">
+        <div className="bg-white border border-slate-100 p-6 rounded-2xl shadow-xs">
         {editingEmp ? (
           <form onSubmit={handleUpdateEmployee} className="flex flex-col gap-5">
             <div>
@@ -299,6 +340,104 @@ export default function EmployeesTab({
             </button>
           </form>
         )}
+        </div>
+
+        {/* Database Clean / Purge Utility Card */}
+        <div className="bg-white border border-slate-100 p-6 rounded-2xl shadow-xs flex flex-col gap-4">
+          <div>
+            <h3 className="font-extrabold text-rose-600 text-xs flex items-center gap-2 uppercase tracking-wide font-display">
+              <Database className="w-4 h-4 text-rose-500" />
+              Database Utility Box
+            </h3>
+            <p className="text-[11px] text-slate-400 mt-1 font-semibold leading-relaxed">
+              Maintain speed and clean table logs by purging archival data.
+            </p>
+          </div>
+
+          <div className="bg-amber-50 border border-amber-200/60 p-3 rounded-xl flex items-start gap-2">
+            <ShieldAlert className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+            <div className="text-[11px] text-slate-600 leading-relaxed font-semibold">
+              <span className="font-extrabold text-amber-800">Clear Records before 01-04-2026:</span> This deletes all historical checkins in your Supabase DB matching timestamps older than <code className="font-mono bg-amber-100 px-1 py-0.2 rounded text-slate-800">2026-04-01</code>.
+            </div>
+          </div>
+
+          {/* Quick Purge Interactive Button */}
+          <button
+            onClick={handlePurgeOldLogs}
+            disabled={isPurging}
+            className={`w-full py-3 rounded-xl font-bold text-xs uppercase tracking-wider transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer ${
+              isPurging 
+                ? "bg-slate-100 text-slate-400 border border-slate-200" 
+                : "bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 hover:shadow-xs"
+            }`}
+          >
+            <Database className="w-3.5 h-3.5" />
+            {isPurging ? "Purging Rows..." : "Purge Data before 01-04-2026"}
+          </button>
+
+          {/* Display execution results */}
+          {purgeResult && (
+            <div className="bg-emerald-50/90 border border-emerald-200 rounded-xl p-3 flex flex-col gap-1 text-[11px] font-semibold text-emerald-800">
+              <div className="font-extrabold pb-1 border-b border-emerald-100 mb-1 flex items-center gap-1 text-emerald-900">
+                <Check className="w-3.5 h-3.5 text-emerald-600" />
+                Table Purge Completed:
+              </div>
+              {purgeResult.map((res) => (
+                <div key={res.company} className="flex justify-between items-center text-[10px] font-bold">
+                  <span>{res.company}:</span>
+                  <span className="font-mono bg-emerald-100 px-1.5 py-0.2 rounded text-emerald-950 font-black">
+                    -{res.deletedCount} rows
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Manual Query Copier */}
+          <div className="border-t border-slate-100 pt-4 flex flex-col gap-2">
+            <div className="flex justify-between items-center">
+              <span className="text-[9px] uppercase font-bold text-slate-400">Supabase SQL Editor Code</span>
+              <button
+                onClick={copySQLQuery}
+                className="text-[10px] text-blue-600 font-bold hover:text-blue-800 flex items-center gap-1 hover:underline cursor-pointer"
+              >
+                {copiedQuery ? (
+                  <>
+                    <Check className="w-3" />
+                    Copied!
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-3" />
+                    Copy Code
+                  </>
+                )}
+              </button>
+            </div>
+
+            <div className="relative">
+              <pre className="bg-slate-900 text-slate-300 font-mono text-[9px] p-2.5 rounded-xl overflow-x-auto whitespace-pre leading-relaxed border border-slate-800">
+{`DELETE FROM "BHANGAKUTHI" 
+WHERE timestamp < '2026-04-01 00:00:00';
+
+DELETE FROM "HB" 
+WHERE timestamp < '2026-04-01 00:00:00';
+
+DELETE FROM "HB-TP" 
+WHERE timestamp < '2026-04-01 00:00:00';
+
+DELETE FROM "HBPL" 
+WHERE timestamp < '2026-04-01 00:00:00';
+
+DELETE FROM "SEFALI" 
+WHERE timestamp < '2026-04-01 00:00:00';`}
+              </pre>
+            </div>
+            <div className="text-[10px] font-semibold text-slate-400 leading-tight">
+              Copy and execute these statements inside your Supabase **SQL Editor** tab to purge records manually.
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Main Panel: Master corporate roster list with editing handles */}

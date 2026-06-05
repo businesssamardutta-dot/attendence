@@ -80,3 +80,24 @@ export async function fetchAllAttendanceLogs() {
   combined.sort((a, b) => (b.timestamp || "").localeCompare(a.timestamp || ""));
   return combined;
 }
+
+// Admin Utility: Deletes logs in company tables before 2026-04-01
+export async function deleteLogsBeforeApril2026() {
+  const companies = ["BHANGAKUTHI", "HB", "HB-TP", "HBPL", "SEFALI"];
+  const purgePromises = companies.map(async (companyTable) => {
+    const { data, error } = await supabase
+      .from(companyTable)
+      .delete()
+      .lt("timestamp", "2026-04-01 00:00:00")
+      .select(); // Fetch deleted rows to get exact count
+    
+    if (error) {
+      console.error(`Error deleting from table ${companyTable}:`, error);
+      throw error;
+    }
+    return { company: companyTable, deletedCount: data ? data.length : 0 };
+  });
+
+  return await Promise.all(purgePromises);
+}
+
